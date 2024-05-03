@@ -1,0 +1,359 @@
+---
+title: "Aufgabe2"
+format: html
+editor: visual
+---
+
+## Exercise A
+
+```{r}
+###Task1
+
+library("sf")
+library("dplyr")
+library(readr)
+
+library(readr)
+wildschwein_BE <- read_csv("wildschwein_BE_2056.csv")
+View(wildschwein_BE)
+
+###Koordinatenset Konvertieren in EPSG 2056
+wildschwein_BE <- st_as_sf(wildschwein_BE, coords = c("E", "N"), crs = 2056)
+
+######Zeit differenz zwischen den einzelnen Punkten berechnen
+difftime_secs <- function(x, y){
+  as.numeric(difftime(x, y, units = "secs"))
+}
+wildschwein <- group_by(wildschwein_BE, TierID)
+wildschwein <- mutate(wildschwein_BE, timelag = as.numeric(difftime_secs(lead(DatetimeUTC), DatetimeUTC)))
+
+View(wildschwein)
+
+wildschwein$TierName
+#####Anzhal Individuen
+n_distinct(wildschwein$TierName)
+
+
+wildschwein_analyse <- group_by(wildschwein, TierName)
+summarise(wildschwein_analyse, mean = mean(timelag, na.rm = TRUE))
+
+####TAsk3 Distanc berechnen
+
+distance_by_element <- function(later, now){
+  as.numeric(
+    st_distance(later, now, by_element = TRUE)
+  )
+}
+wildschwein <- mutate(wildschwein, steplength  = as.numeric(distance_by_element(lead(geometry), geometry)))
+wildschwein_analyse <- group_by(wildschwein, TierName)
+summarise(wildschwein_analyse, mean = mean(steplength, na.rm = TRUE))
+
+######TAsk4
+#####Calculate speed as step length divided by time lag
+wildschwein <- wildschwein %>%
+  mutate(speed = steplength / timelag)  # speed in units per second
+
+######TAsk 5
+
+wildschwein_sample <- wildschwein |>
+  filter(TierName == "Sabi") |> 
+  head(100)
+
+library(tmap)
+tmap_mode("view")
+
+tm_shape(wildschwein_sample) + 
+  tm_dots()
+
+wildschwein_sample_line <- wildschwein_sample |> 
+  # dissolve to a MULTIPOINT:
+  summarise(do_union = FALSE) |> 
+  st_cast("LINESTRING")
+
+tmap_options(basemaps = "OpenStreetMap")
+
+tm_shape(wildschwein_sample_line) +
+  tm_lines() +
+  tm_shape(wildschwein_sample) + 
+  tm_dots()
+
+wildschwein_BE
+```
+
+# Exercise 2
+
+```{r}
+###Exercise B
+
+library(readr)
+
+caro <- read_delim("caro60.csv") |>
+  st_as_sf(coords = c("E","N"), crs = 2056) |> 
+  select(DatetimeUTC)
+View(caro)
+####funktions
+library("readr")
+library("sf")
+library("dplyr")
+
+difftime_secs <- function(x, y){
+  as.numeric(difftime(x, y, units = "secs"))
+}
+
+distance_by_element <- function(later, now){
+  as.numeric(
+    st_distance(later, now, by_element = TRUE)
+  )
+}
+
+#### Task1 Calculate speed at scale 1
+library(sf)
+library(dplyr)
+library(lubridate)
+
+difftime_secs <- function(x, y){
+  as.numeric(difftime(x, y, units = "secs"))
+}
+
+caro1 <- mutate(caro, timelag = as.numeric(difftime_secs(lag(DatetimeUTC,2, default = first(DatetimeUTC)), DatetimeUTC)))
+
+caro1 <- mutate(caro, steplength  = as.numeric(distance_by_element(lag(geometry), geometry)))
+head(caro1)
+
+
+caro <- caro %>%
+  mutate(
+    DatetimeUTC = ymd_hms(DatetimeUTC) # ensure the datetime format
+  ) %>%
+  arrange(DatetimeUTC) %>%
+  mutate(
+    next_geom = lead(geometry, 2, default = first(NA)),  # Skipping one point, looking two steps ahead
+    next_time = lead(DatetimeUTC, 2, default = first(NA)),
+    timelag = difftime(next_time, DatetimeUTC, units = "secs"),
+    steplength = st_distance(geometry, next_geom, by_element = TRUE),
+    speed = if_else(timelag == 0, NA_real_, as.numeric(steplength / timelag, units = "m/s")) # Avoid division by zero
+  ) %>%
+  select(DatetimeUTC, geometry, timelag, steplength, speed)
+
+# Print the results to verify
+print(head(caro))
+
+#####Task 2
+caro <- caro %>%
+  mutate(
+    DatetimeUTC = ymd_hms(DatetimeUTC) # ensure the datetime format
+  ) %>%
+  arrange(DatetimeUTC) %>%
+  mutate(
+    next_geom = lead(geometry, 4, default = first(NA)),  # Skipping one point, looking two steps ahead
+    next_time = lead(DatetimeUTC, 4, default = first(NA)),
+    timelag2 = difftime(next_time, DatetimeUTC, units = "secs"),
+    steplength2 = st_distance(geometry, next_geom, by_element = TRUE),
+    speed2 = if_else(timelag == 0, NA_real_, as.numeric(steplength2 / timelag2, units = "m/s")) # Avoid division by zero
+  ) %>%
+  select(DatetimeUTC, geometry, timelag2, steplength2, speed2)
+
+# Print the results to verify
+
+print(head(caro))
+```
+
+# Exercise B
+
+```{r}
+library("readr")
+library("sf")
+library("dplyr")
+
+difftime_secs <- function(x, y){
+  as.numeric(difftime(x, y, units = "secs"))
+}
+
+distance_by_element <- function(later, now){
+  as.numeric(
+    st_distance(later, now, by_element = TRUE)
+  )
+}
+caro <- read_delim("caro60.csv", ",") |>
+  st_as_sf(coords = c("E","N"), crs = 2056) |> 
+  select(DatetimeUTC)
+View(caro)
+```
+
+## Task1
+
+```{r}
+## Calculate speed at scale 1
+
+
+caro <- mutate(caro, timelag = as.numeric(difftime_secs(lead(DatetimeUTC,1) , lag(DatetimeUTC, 1))))
+
+caro <- mutate(caro, steplength  = as.numeric(distance_by_element(lead(geometry, n=1), lag(geometry, n=1))))
+
+head(caro)
+
+# Calculate speed (distance / time)
+caro$speed <- caro$steplength / caro$timelag
+
+# Print the resulting dataset with speed calculations
+print(caro)
+```
+
+## Task2
+
+```{r}
+## Calculate speed at scale 2
+
+
+caro <- mutate(caro, timelag2 = as.numeric(difftime_secs(lead(DatetimeUTC,2) , lag(DatetimeUTC, 2))))
+
+caro <- mutate(caro, steplength2  = as.numeric(distance_by_element(lead(geometry, n=2), lag(geometry, n=2))))
+
+head(caro)
+
+# Calculate speed (distance / time)
+caro$speed2 <- caro$steplength2 / caro$timelag2
+
+# Print the resulting dataset with speed calculations
+print(caro)
+
+caro |> 
+  # drop geometry and select only specific columns
+  # to display relevant data only
+  st_drop_geometry() |> 
+  select(timelag2, steplength2, speed2) |> 
+  head()
+```
+
+## Task3
+
+```{r}
+## Calculate speed at scale 3
+
+
+caro <- mutate(caro, timelag3 = as.numeric(difftime_secs(lead(DatetimeUTC,4) , lag(DatetimeUTC, 4))))
+
+caro <- mutate(caro, steplength3  = as.numeric(distance_by_element(lead(geometry, n=4), lag(geometry, n=4))))
+
+head(caro)
+
+# Calculate speed (distance / time)
+caro$speed3 <- caro$steplength3 / caro$timelag3
+
+# Print the resulting dataset with speed calculations
+print(caro)
+caro |> 
+  st_drop_geometry() |> 
+  select(timelag3, steplength3, speed3) |> 
+  head()
+```
+
+## Task4
+
+```{r}
+caro |> 
+  st_drop_geometry() |> 
+  select(DatetimeUTC, speed, speed2, speed3)
+library(ggplot2)
+
+ggplot(caro, aes(y = speed)) + 
+    # we remove outliers to increase legibility, analogue
+  # Laube and Purves (2011)
+  geom_boxplot(outliers = FALSE)
+library(tidyr)
+
+# before pivoting, let's simplify our data.frame
+caro2 <- caro |> 
+  st_drop_geometry() |> 
+  select(DatetimeUTC, speed, speed2, speed3)
+
+caro_long <- caro2 |> 
+  pivot_longer(c(speed, speed2, speed3))
+  
+head(caro_long)
+
+
+# Plot box plots to compare speed measurements at different scales
+ggplot(caro_long, aes(name, value)) +
+  geom_boxplot(outlier.shape = NA) +  # Remove outliers for better visualization
+  labs(x = "Scale", y = "Speed") +  # Set axis labels
+  theme_minimal() + # Apply minimal theme for better clarity +
+  scale_y_continuous(limits = c(0, 0.1))
+```
+
+# Exercise C
+
+```{r}
+# Load required libraries
+library("readr")    # To read CSV files
+library("sf")       # For spatial data operations
+library("dplyr")    # For data manipulation
+library("ggplot2")  # For creating graphics
+library("lubridate")# For handling date and time
+library("tmap")     # For creating thematic maps
+#Daten Einlesen
+
+
+Daten_Bewegung <- read_csv("Daten_Bewegung.csv")
+View(Daten_Bewegung)
+Daten_mod  <- Daten_Bewegung
+Daten_mod$user_id <- NULL
+Daten_mod$weekday <- NULL
+Daten_mod$place_name <- NULL
+Daten_mod$transport_mode <- NULL
+View(Daten_mod)
+
+# Daten in ein sf-Objekt umwandeln
+Daten_mod <- st_as_sf(Daten_mod, coords = c("lon_x", "lat_y"), crs = 4326)
+
+# Koordinatensystem zu EPSG 2056 transformieren
+Daten_mod <- st_transform(Daten_mod, crs = 2056)
+
+# Ensure the correct time format and sort the data by time
+Daten_mod$datetime <- as.POSIXct(Daten_mod$datetime, format = "%Y-%m-%dT%H:%M:%SZ")
+Daten_mod <- Daten_mod %>% arrange(datetime)
+
+## Calculate speed at scale 3
+
+
+Daten_mod <- mutate(Daten_mod, timelag = as.numeric(difftime_secs(lead(datetime,4) , lag(datetime, 4))))
+
+Daten_mod <- mutate(Daten_mod, steplength  = as.numeric(distance_by_element(lead(geometry, n=4), lag(geometry, n=4))))
+
+head(Daten_mod)
+
+# Calculate speed (distance / time)
+Daten_mod$speed <- round((Daten_mod$steplength / Daten_mod$timelag)*3.6)
+
+################################
+
+Daten_mod_line <- Daten_mod |> 
+  # dissolve to a MULTIPOINT:
+  summarise(do_union = FALSE) |> 
+  st_cast("LINESTRING")
+
+
+# Filter rows where 'speed' is less than or equal to 1000
+Daten_mod1000 <- Daten_mod %>% 
+  filter(speed <= 1000)
+
+# Filter rows where 'speed' is less than or equal to 200
+Daten_mod200 <- Daten_mod %>% 
+  filter(speed <= 200)
+
+# Filter rows where 'speed' is less than or equal to 10
+Daten_mod10 <- Daten_mod %>% 
+  filter(speed <= 10)
+
+# Assuming Daten_mod and Daten_mod_line are already properly prepared
+tmap_options(basemaps = "OpenStreetMap")
+
+tmap_mode("view")
+
+# Plot configuration
+tm_shape(Daten_mod_line) +
+  tm_lines() +
+  tm_shape(Daten_mod10) +
+  tm_dots(col = "speed", palette = "-RdYlBu", style = "cont")
+
+```
